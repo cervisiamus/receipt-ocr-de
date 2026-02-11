@@ -2,6 +2,23 @@ import cv2
 import numpy as np
 import easyocr
 
+def add_black_bottom(image, height_percentage=0.10):
+    """
+    Adds a black bar to the bottom of the image.
+    This creates an artificial border if the receipt is cropped at the bottom.
+    height_percentage: height of the bar relative to image height (0.10 = 10%)
+    """
+    h, w = image.shape[:2]
+    bar_height = int(h * height_percentage)
+    
+    # Create a black image with the required width and height
+    # (using 3 color channels to match the original image)
+    black_bar = np.zeros((bar_height, w, 3), dtype="uint8")
+    
+    # Vertically stack the original photo and the black bar
+    combined_image = np.vstack((image, black_bar))
+    return combined_image
+
 def order_points(pts):
     """Sorts 4 points in the order: Top-Left, Top-Right, Bottom-Right, Bottom-Left"""
     rect = np.zeros((4, 2), dtype="float32")
@@ -47,6 +64,11 @@ def scan_receipt(image_path):
         print("Error: Image not found!")
         return None
         
+    # --- NEW STEP: Add artificial bottom border ---
+    print("Adding artificial bottom border for better detection...")
+    image = add_black_bottom(image)
+
+
     orig = image.copy()
     
     # 2. Resize for faster contour detection
@@ -93,21 +115,26 @@ def scan_receipt(image_path):
 
 # --- TESTING BLOCK ---
 if __name__ == "__main__":
-    test_image = "test_images/receipt_check.jpg" 
+    test_image = "test_images/receipt_check_croped.png" 
     
     # Step 1: Process the image with OpenCV
     print("Processing image geometry and color...")
     processed_image = scan_receipt(test_image)
     
     if processed_image is not None:
+        # Show the visual B&W result (press any key to close)
+        # We expect to see a flat receipt cropped exactly along the added black border
+        cv2.imshow("Scanned B&W Receipt", cv2.resize(processed_image, (500, 800)))
+        print("Press any key in the image window to continue to OCR...")
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
         # Step 2: Initialize EasyOCR
-        # We pass 'de' for German and 'en' as a fallback
-        print("Initializing EasyOCR (this might take a few seconds)...")
+        print("Initializing EasyOCR...")
         reader = easyocr.Reader(['de', 'en'])
         
         # Step 3: Extract text
         print("Extracting text...")
-        # detail=0 returns a simple list of strings.
         text_results = reader.readtext(processed_image, detail=0)
         
         # Step 4: Print the results
@@ -115,8 +142,3 @@ if __name__ == "__main__":
         for line in text_results:
             print(line)
         print("------------------------------\n")
-        
-        # Show the visual B&W result (press any key to close)
-        cv2.imshow("Scanned B&W Receipt", cv2.resize(processed_image, (500, 800)))
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
