@@ -56,6 +56,45 @@ def four_point_transform(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
+def get_content_area(image):
+    """
+    Step 1: Two-Pass OCR (Scout Pass).
+    Finds the Y-coordinates of 'UID' (top) and 'SUMME' (bottom) to isolate items.
+    """
+    # Initialize a fast reader for anchor detection (only English for speed)
+    reader_fast = easyocr.Reader(['en'], gpu=True) # Set gpu=False if no GPU
+    
+    # Detailed pass to get bounding boxes
+    results = reader_fast.readtext(image, detail=1)
+    
+    h, w = image.shape[:2]
+    
+    # Default boundaries (if anchors are not found)
+    top_y = 0
+    bottom_y = h
+
+    for (bbox, text, prob) in results:
+        text_upper = text.upper()
+        
+        # Look for UID (header anchor). Using 'in' to catch 'UID:' or 'U1D'
+        if "UID" in text_upper or "U1D" in text_upper:
+            # bbox[0][1] is the Top-Left Y coordinate
+            top_y = int(bbox[0][1])
+            print(f"Anchor found: Header (UID) at Y={top_y}")
+
+        # Look for SUMME (footer anchor). Using 'in' for 'SUMME' or '5UMME'
+        if "SUMME" in text_upper or "5UMME" in text_upper or "SUMN" in text_upper:
+            # bbox[2][1] is the Bottom-Right Y coordinate
+            bottom_y = int(bbox[2][1])
+            print(f"Anchor found: Footer (SUMME) at Y={bottom_y}")
+
+    # Crop the image with a small margin (padding) to avoid cutting text
+    padding = 10
+    start_y = max(0, top_y - padding)
+    end_y = min(h, bottom_y + padding)
+
+    return image[start_y:end_y, :]
+
 def scan_receipt(image_path):
     """Processes the raw image and returns a cropped, flattened, B&W receipt"""
     # 1. Load the image
@@ -113,36 +152,41 @@ def scan_receipt(image_path):
 if __name__ == "__main__":
     test_image = "test_images/receipt_check_croped.png" 
     
-    # Step 1: Process the image with OpenCV
-    print("Processing image geometry and color...")
+    # Step 1: Initial geometric and color processing
+    print("Processing image geometry and basic preprocessing...")
     processed_image = scan_receipt(test_image)
     
     if processed_image is not None:
-        # Show the visual B&W result (press any key to close)
-        # We expect to see a flat receipt cropped exactly along the added black border
-        cv2.imshow("Scanned B&W Receipt", cv2.resize(processed_image, (500, 800)))
-        print("Press any key in the image window to continue to OCR...")
+        # --- STAGE 1: CROP TO CONTENT (ROI Detection) ---
+        print("Searching for UID and SUMME anchors to isolate the item list...")
+        
+        # We pass the processed B&W image to find anchors and get the cropped area
+        content_image = get_content_area(processed_image)
+        
+        # Visual debugging: show the cropped result (press any key to close)
+        cv2.imshow("Stage 1: Cropped Content Area", cv2.resize(content_image, (500, 800)))
+        print("Cropped area ready. Review the window and press any key to continue to final OCR...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-        # Step 2: Initialize EasyOCR
-        print("Initializing EasyOCR...")
-        reader = easyocr.Reader(['de', 'en'])
+        # Step 2: Initialize Final OCR Reader
+        # Using German and English for the receipt items
+        print("Initializing EasyOCR for final extraction...")
+        reader = easyocr.Reader(['de', 'en'], gpu=True)
         
-        # Step 3: Extract text
-        print("Extracting text with custom grouping thresholds...")
-        # width_ths: increases the horizontal "magnet" to merge words separated by large spaces
-        # x_ths: allows merging bounding boxes that are far apart on the X-axis
+        # Step 3: Extract text from the CROPPED content only
+        print("Extracting text with custom grouping thresholds from the ROI...")
+        # We use content_image here instead of processed_image to avoid header/footer noise
         text_results = reader.readtext(
-            processed_image, 
+            content_image, 
             detail=0, 
             paragraph=False, 
             width_ths=1.5, 
             x_ths=2.0 
         )
         
-        # Step 4: Print the results
-        print("\n--- EXTRACTED RECEIPT TEXT ---")
+        # Step 4: Final Output
+        print("\n--- EXTRACTED ITEMS & PRICES ---")
         for line in text_results:
             print(line)
-        print("------------------------------\n")
+        print("--------------------------------\n")
