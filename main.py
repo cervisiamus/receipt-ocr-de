@@ -95,6 +95,23 @@ def get_content_area(image):
 
     return image[start_y:end_y, :]
 
+def split_receipt_vertical(image, ratio=0.60):
+    """
+    Step 2: Vertical Split.
+    Splits the image into two parts: Left (items) and Right (prices).
+    ratio=0.70 means 70% for the left side and 30% for the right side.
+    """
+    h, w = image.shape[:2]
+    
+    # Calculate the split point on the X-axis
+    split_x = int(w * ratio)
+    
+    # Crop the image: [y_start:y_end, x_start:x_end]
+    left_part = image[:, 0:split_x]
+    right_part = image[:, split_x:w]
+    
+    return left_part, right_part
+
 def scan_receipt(image_path):
     """Processes the raw image and returns a cropped, flattened, B&W receipt"""
     # 1. Load the image
@@ -159,34 +176,29 @@ if __name__ == "__main__":
     if processed_image is not None:
         # --- STAGE 1: CROP TO CONTENT (ROI Detection) ---
         print("Searching for UID and SUMME anchors to isolate the item list...")
-        
         # We pass the processed B&W image to find anchors and get the cropped area
         content_image = get_content_area(processed_image)
         
-        # Visual debugging: show the cropped result (press any key to close)
-        cv2.imshow("Stage 1: Cropped Content Area", cv2.resize(content_image, (500, 800)))
-        print("Cropped area ready. Review the window and press any key to continue to final OCR...")
+        # --- STAGE 2: VERTICAL SPLIT ---
+        print("Splitting image into Left (Items) and Right (Prices) parts...")
+        # Using 75/25 ratio to accommodate long product names
+        left_img, right_img = split_receipt_vertical(content_image, ratio=0.7)
+        
+        # Visual debugging for Split
+        # This helps verify that prices are isolated and names are not cut off
+        cv2.imshow("Stage 2: Left Side (Items)", left_img)
+        cv2.imshow("Stage 2: Right Side (Prices)", right_img)
+        
+        print("Split complete. Check the windows and press any key to continue to OCR...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
         # Step 2: Initialize Final OCR Reader
-        # Using German and English for the receipt items
+        # We'll need German for items, but maybe just English for price numbers
         print("Initializing EasyOCR for final extraction...")
         reader = easyocr.Reader(['de', 'en'], gpu=True)
         
-        # Step 3: Extract text from the CROPPED content only
-        print("Extracting text with custom grouping thresholds from the ROI...")
-        # We use content_image here instead of processed_image to avoid header/footer noise
-        text_results = reader.readtext(
-            content_image, 
-            detail=0, 
-            paragraph=False, 
-            width_ths=1.5, 
-            x_ths=2.0 
-        )
-        
-        # Step 4: Final Output
-        print("\n--- EXTRACTED ITEMS & PRICES ---")
-        for line in text_results:
-            print(line)
-        print("--------------------------------\n")
+        # --- STAGE 3 PREVIEW (We will refine this next) ---
+        print("Ready for independent OCR on each side.")
+        # For now, we just print a placeholder message
+        print("Next step: OCR with Allowlist for prices and text matching.")
