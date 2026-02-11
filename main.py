@@ -103,14 +103,10 @@ def scan_receipt(image_path):
     
     # --- NEW STEP: BLACK & WHITE CONVERSION ---
     
-    # 6. Convert the final cropped receipt to Grayscale (removes color noise)
-    # This is usually the best format for Deep Learning OCRs like EasyOCR
+    # 6. Convert the final cropped receipt to Grayscale
     final_image = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
     
-    # Optional: Strict Black and White (Adaptive Thresholding)
-    # If the text is too faint, you can uncomment the line below to force strict B&W.
-    # final_image = cv2.adaptiveThreshold(final_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-
+    
     return final_image
 
 # --- TESTING BLOCK ---
@@ -134,8 +130,16 @@ if __name__ == "__main__":
         reader = easyocr.Reader(['de', 'en'])
         
         # Step 3: Extract text
-        print("Extracting text...")
-        text_results = reader.readtext(processed_image, detail=0)
+        print("Extracting text with custom grouping thresholds...")
+        # width_ths: increases the horizontal "magnet" to merge words separated by large spaces
+        # x_ths: allows merging bounding boxes that are far apart on the X-axis
+        text_results = reader.readtext(
+            processed_image, 
+            detail=0, 
+            paragraph=False, 
+            width_ths=1.5, 
+            x_ths=2.0 
+        )
         
         # Step 4: Print the results
         print("\n--- EXTRACTED RECEIPT TEXT ---")
