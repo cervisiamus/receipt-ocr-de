@@ -1,1 +1,0 @@
-# German Receipt OCR
