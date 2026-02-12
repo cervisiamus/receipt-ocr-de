@@ -1,10 +1,13 @@
 [project]
 name = "beleg-analyser"
 version = "0.1.0"
-description = "Add your description here"
+description = "Receipt Analyser with PaddleOCR"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = "~=3.11.0"  
 dependencies = [
-    "easyocr>=1.7.2",
-    "opencv-python>=4.13.0.92",
+    "paddlepaddle==2.6.2",
+    "paddleocr==2.7.3",
+    "opencv-python==4.6.0.66",
+    "setuptools>=82.0.0",
+    "numpy<2.0.0",
 ]
